@@ -49,6 +49,12 @@ Während einer Gitarrenwechsel-Pause beendet die Pause-Taste den Durchlauf. Ein 
 
 ## Speicherung
 
+**Speichern unter …** in der linken Bibliotheksleiste archiviert die aktuelle Setliste oder alle Setlisten als einzelne `.gigman`-Datei. Sie enthält die MP3s, Reihenfolge, Sektionen, Wechselpausen, Abspielumfang, Tempo, Tonhöhe, Vorzählen, BPM und Lautstärke. Der vorgeschlagene Dateiname enthält das Datum. Die automatische lokale Speicherung läuft unabhängig davon weiter; ein Archiv ist eine Momentaufnahme und wird durch spätere Änderungen nicht aktualisiert.
+
+**Laden …** importiert eine Sicherung zusätzlich zu den vorhandenen Setlisten. Gleichnamige Listen erhalten einen Import-Zusatz. MP3s werden wieder in die lokale Bibliothek kopiert. Das Archiv wird dabei nicht verändert und lässt sich auch auf einem anderen Windows- oder Linux-Rechner laden. Prüfsummen erkennen beschädigte Audiodateien vor dem Import. Fehlt eine lokale MP3 beim Sichern, bleibt eine eventuell vorhandene Archivdatei erhalten.
+
+Die `.gigman`-Datei ist ein gewöhnliches TAR/GZIP-Archiv mit `setlists.json` und einem `audio`-Ordner. Für eine unabhängige Archivierung kann sie mit einem geeigneten Archivprogramm geöffnet werden. Zum Laden in GigMan bitte die gesamte Datei unverändert lassen.
+
 MP3s werden beim Import in die lokale App-Bibliothek kopiert. Originaldateien können danach verschoben werden. Setlisten, Reihenfolge, Sektionen, Wechselpausen und Audioeinstellungen werden automatisch als `library.json` gespeichert. Schreibvorgänge erfolgen über eine temporäre Datei und anschließendes Umbenennen.
 
 - Windows: `%APPDATA%\GigMan\` (beim Start aus dem Quellcode: `gigman`)

@@ -4,6 +4,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { createDownloader } = require('./youtube.cjs');
+const { exportArchive, importArchive } = require('./archive.cjs');
 protocol.registerSchemesAsPrivileged([{ scheme: 'gigman', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 if (process.env.GIGMAN_DATA_DIR) app.setPath('userData', path.resolve(process.env.GIGMAN_DATA_DIR));
 let window, root;
@@ -47,6 +48,27 @@ app.whenReady().then(async () => {
     return net.fetch(pathToFileURL(file).toString());
   });
   ipcMain.handle('library:load', load);
+  let archiveBusy = false;
+  ipcMain.handle('archive:export', async (_event, library) => {
+    if (archiveBusy) throw new Error('Eine Sicherung wird bereits verarbeitet.');
+    archiveBusy = true;
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      const name = library.setlists.length === 1 ? library.setlists[0].name : 'GigMan-Bibliothek';
+      const result = await dialog.showSaveDialog(window, { title: 'Setlisten mit MP3s sichern', defaultPath: `${String(name).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}-${date}.gigman`, filters: [{ name: 'GigMan-Sicherung', extensions: ['gigman'] }] });
+      if (result.canceled || !result.filePath) return null;
+      await saveQueue.catch(() => {});
+      return await exportArchive(root, result.filePath, library);
+    } finally { archiveBusy = false; }
+  });
+  ipcMain.handle('archive:import', async () => {
+    if (archiveBusy) throw new Error('Eine Sicherung wird bereits verarbeitet.');
+    archiveBusy = true;
+    try {
+      const result = await dialog.showOpenDialog(window, { title: 'GigMan-Sicherung laden', properties: ['openFile'], filters: [{ name: 'GigMan-Sicherung', extensions: ['gigman'] }] });
+      return result.canceled ? null : await importArchive(root, result.filePaths[0]);
+    } finally { archiveBusy = false; }
+  });
   ipcMain.on('window:close-ready', event => {
     if (window && event.sender === window.webContents) { mayClose = true; window.close(); }
   });

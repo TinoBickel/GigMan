@@ -260,10 +260,36 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Kompakte Leiste passt auch bei minimaler Fensterbreite');
   assert.ok(await page.locator('.song-controls').first().evaluate(el => el.lastElementChild.getBoundingClientRect().right <= el.getBoundingClientRect().right + 1), 'Alle Songregler passen vollständig in eine Zeile');
   await page.screenshot({ path: path.join(output, 'gigman-compact.png'), fullPage: true });
+  const archive = path.join(data, 'portable.gigman');
+  await desktop.evaluate(({ dialog }, archive) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: archive }); }, archive);
+  await page.locator('[data-action="save-as"]').click();
+  await page.locator('dialog button[type="submit"]').click();
+  await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('Songs gesichert') && !document.querySelector('[data-action="load-archive"]').disabled);
+  assert.ok((await fs.stat(archive)).size > 10000, 'Sicherung enthält MP3s');
+  await desktop.evaluate(({ dialog }, archive) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [archive] }); }, archive);
+  await page.locator('[data-action="load-archive"]').click();
+  await page.waitForFunction(() => document.querySelectorAll('.list-link').length === 2 && !document.body.textContent.includes('Waveform wird geladen'));
+  assert.equal(await page.locator('h1').textContent(), 'Friday Night · Live (Import 1)');
+  assert.equal(await page.locator('.song-tempo').last().inputValue(), '0.75');
+  assert.equal(await page.locator('.song-bpm').last().inputValue(), '140');
+  assert.equal(await page.locator('.song-volume').last().inputValue(), '0.35');
+  assert.equal(await page.locator('.region').count(), 2);
+  await page.locator('[data-action="song-start"]').first().click();
+  await page.waitForFunction(() => !document.querySelector('[data-action="song-stop"]').disabled);
+  await page.locator('[data-action="song-stop"]').first().click();
+  const importedLibrary = JSON.parse(await fs.readFile(path.join(data, 'library.json'), 'utf8'));
+  assert.equal(importedLibrary.setlists[0].name, 'Friday Night · Live', 'Laden erhält die vorhandene Bibliothek');
+  assert.notEqual(importedLibrary.setlists[0].songs[0].file, importedLibrary.setlists[1].songs[0].file);
+  const allArchive = path.join(data, 'all-setlists.gigman');
+  await desktop.evaluate(({ dialog }, archive) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: archive }); }, allArchive);
+  await page.locator('[data-action="save-as"]').click(); await page.locator('[name="scope"]').selectOption('all');
+  await page.locator('dialog button[type="submit"]').click();
+  await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('2 Setliste(n) mit 4 Songs gesichert'));
+  await page.screenshot({ path: path.join(output, 'gigman-archive.png'), fullPage: true });
   await page.locator('[data-action="rename"]').click(); await page.locator('[name="name"]').fill('Sofort gespeichert'); await page.locator('dialog button[type="submit"]').click();
   await desktop.close(); desktop = null;
   const onClose = JSON.parse(await fs.readFile(path.join(data, 'library.json'), 'utf8'));
-  assert.equal(onClose.setlists[0].name, 'Sofort gespeichert', 'Schließen wartet auf ausstehende Speicherung');
+  assert.equal(onClose.setlists.at(-1).name, 'Sofort gespeichert', 'Schließen wartet auf ausstehende Speicherung');
   console.log('PASS: MP3-Import, vollständige Vorschau, Waveform-Suche, Sektionen verschieben/vergrößern/verkleinern, Songfolge, Wechselpause, Audio-Tempo/Tonhöhe, Loop/Pause, Vorzählen, YouTube-URL-Validierung, Drag-and-drop, Neustart und Speicherung beim Schließen.');
 } catch (error) {
   if (latestPage && !latestPage.isClosed()) {

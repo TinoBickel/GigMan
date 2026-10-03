@@ -22,6 +22,8 @@ let playbackScope = null;
 let downloadActive = false, downloadTask = null;
 let saveTimer, savePending = false, saveError = false;
 let titleEditor = null;
+let archiveTask = null;
+let archiveStatus = '';
 const waves = new Map(), failures = new Set();
 const current = () => state.setlists.find(s => s.id === activeId);
 const songById = id => current()?.songs.find(s => s.id === id);
@@ -44,8 +46,8 @@ function render() {
     <div class="nav-label">DEINE BIBLIOTHEK <span>${state.setlists.length}</span></div>
     <button class="new-list" data-action="new">${icon('plus')} Neue Setliste</button>
     <nav>${state.setlists.map(l => `<button class="list-link ${l.id === activeId ? 'active' : ''}" data-action="list" data-id="${l.id}">${icon('music')}<span>${esc(l.name)}<small>${l.songs.length} Songs</small></span>${l.id === activeId ? '<i></i>' : ''}</button>`).join('')}</nav>
-    <div class="sidebar-bottom"><span class="local-dot"></span> Offline. Auf deiner Bühne.<small>MP3s & Markierungen bleiben lokal.</small></div></aside>
-    <main><header class="topbar"><div class="setlist-summary"><h1 title="${esc(list?.name || 'Willkommen')}">${esc(list?.name || 'Dein Gig beginnt hier.')}</h1><p>${list ? `${songs.length} Songs <span>·</span> ${sectionCount} Übungssektionen <span>·</span> ${time(songs.reduce((n, s) => n + s.duration, 0))} Gesamtlänge` : 'Deine Songs. Deine Übungsstellen.'}</p></div><div class="mode-switch"><button data-action="mode-song" class="${mode === 'song' ? 'selected' : ''}" title="Setliste mit den Einstellungen jedes Songs abspielen">${icon('music')} Song Mode</button><button data-action="mode-loop" class="${mode === 'loop' ? 'selected' : ''}" title="Ausgewählte Sektion wiederholen">${icon('loop')} Loop Mode</button></div><div class="setlist-player"><div class="setlist-buttons"><button class="play-button" data-action="setlist-start" title="Ganze Setliste starten / fortsetzen" aria-label="Setliste starten" ${!songs.length ? 'disabled' : ''}>${icon('play')}</button><button class="square" data-action="setlist-pause" title="Setliste pausieren" aria-label="Setliste pausieren" ${!(playing && playbackScope === 'setlist') ? 'disabled' : ''}>${icon('pause')}</button><button class="square" data-action="setlist-stop" title="Setliste stoppen" aria-label="Setliste stoppen" ${!((playing || paused) && playbackScope === 'setlist') ? 'disabled' : ''}>${icon('stop')}</button></div><small id="play-status">${playing || paused ? esc(songById(selectedSong)?.title || '') : 'Setliste abspielen'}</small></div><div class="topbar-actions">${list ? `<button data-action="rename" title="Setliste umbenennen">Umbenennen</button><button data-action="youtube" ${busy ? 'disabled' : ''}>${icon('plus')} YouTube → MP3</button><button class="primary" data-action="import-folder" ${busy ? 'disabled' : ''}>${icon('folder')} ${busy ? 'Import läuft …' : 'Ordner importieren'}</button>` : `<button class="primary" data-action="new">${icon('plus')} Neue Setliste</button>`}<button class="quiet" data-action="help" title="Tastaturkürzel" aria-label="Tastaturkürzel"><kbd>?</kbd></button></div></header>
+    <div class="archive-tools"><button data-action="save-as" ${busy || !state.setlists.length ? 'disabled' : ''}>Speichern unter …</button><button data-action="load-archive" ${busy ? 'disabled' : ''}>Laden …</button><small>${archiveStatus || 'Portable Sicherung inklusive MP3s'}</small></div><div class="sidebar-bottom"><span class="local-dot"></span> Offline. Auf deiner Bühne.<small>MP3s & Markierungen bleiben lokal.</small></div></aside>
+    <main><header class="topbar"><div class="setlist-summary"><h1 title="${esc(list?.name || 'Willkommen')}">${esc(list?.name || 'Dein Gig beginnt hier.')}</h1><p>${list ? `${songs.length} Songs <span>·</span> ${sectionCount} Übungssektionen <span>·</span> ${time(songs.reduce((n, s) => n + s.duration, 0))} Gesamtlänge` : 'Deine Songs. Deine Übungsstellen.'}</p></div><div class="mode-switch"><button data-action="mode-song" class="${mode === 'song' ? 'selected' : ''}" title="Setliste mit den Einstellungen jedes Songs abspielen">${icon('music')} Song Mode</button><button data-action="mode-loop" class="${mode === 'loop' ? 'selected' : ''}" title="Ausgewählte Sektion wiederholen">${icon('loop')} Loop Mode</button></div><div class="setlist-player"><div class="setlist-buttons"><button class="play-button" data-action="setlist-start" title="Ganze Setliste starten / fortsetzen" aria-label="Setliste starten" ${!songs.length ? 'disabled' : ''}>${icon('play')}</button><button class="square" data-action="setlist-pause" title="Setliste pausieren" aria-label="Setliste pausieren" ${!(playing && playbackScope === 'setlist') ? 'disabled' : ''}>${icon('pause')}</button><button class="square" data-action="setlist-stop" title="Setliste stoppen" aria-label="Setliste stoppen" ${!((playing || paused) && playbackScope === 'setlist') ? 'disabled' : ''}>${icon('stop')}</button></div><small id="play-status">${playing || paused ? esc(songById(selectedSong)?.title || '') : 'Setliste abspielen'}</small></div><div class="topbar-actions">${list ? `<button data-action="rename" title="Setliste umbenennen">Umbenennen</button><button data-action="youtube" ${busy ? 'disabled' : ''}>${icon('plus')} YouTube → MP3</button><button class="primary" data-action="import-folder" ${busy ? 'disabled' : ''}>${icon('folder')} ${busy ? 'Bitte warten …' : 'Ordner importieren'}</button>` : `<button class="primary" data-action="new">${icon('plus')} Neue Setliste</button>`}<button class="quiet" data-action="help" title="Tastaturkürzel" aria-label="Tastaturkürzel"><kbd>?</kbd></button></div></header>
     <div class="content">
     ${songs.length ? `<div class="song-list">${songs.map((song, i) => songRow(song, i)).join('')}</div><button class="add-song" data-action="import-files" ${busy ? 'disabled' : ''}>${icon('plus')} MP3-Dateien hinzufügen</button>` : `<div class="empty"><div class="empty-icon">${icon('music')}</div><h2>${list ? 'Platz für deine nächste Show.' : 'Mehr spielen. Weniger suchen.'}</h2><p>${list ? 'Importiere einen Ordner mit MP3s. Markiere deine Solos<br>und bring die Songs in deine Reihenfolge.' : 'Erstelle deine erste Setliste und importiere die Songs<br>direkt aus einem Ordner auf deinem Rechner.'}</p><button class="primary" data-action="${list ? 'import-folder' : 'new'}">${icon(list ? 'folder' : 'plus')}${list ? 'MP3-Ordner wählen' : 'Setliste erstellen'}</button><div class="empty-steps"><span>01 <b>Songs importieren</b></span><span>02 <b>Sektionen markieren</b></span><span>03 <b>Gig vorbereiten</b></span></div></div>`}
     <div class="content-foot"><span>${icon('clock')} Wechselpausen gelten zwischen Songs.</span><span id="saved">${saveError ? 'Speichern fehlgeschlagen' : 'Lokal gespeichert'}</span>${list ? '<button class="text-danger" data-action="delete-list">Setliste löschen</button>' : ''}</div></div></main>
@@ -234,7 +236,45 @@ async function importAudio(folder) {
   } catch { notify('Import fehlgeschlagen. Verzeichnis und freien Speicherplatz prüfen.'); }
   busy = false; render(); await hydrate();
 }
+function archiveError(error) { return error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''); }
+async function loadArchive() {
+  if (busy) return;
+  let message;
+  stop(); busy = true; archiveStatus = 'Sicherung wird geladen …'; render();
+  archiveTask = (async () => {
+    try {
+      const restored = await window.gigman.importArchive();
+      if (!restored) return;
+      for (const list of restored.setlists) {
+        const base = list.name; let suffix = 1;
+        while (state.setlists.some(existing => existing.name === list.name)) list.name = base.slice(0, 80) + ' (Import ' + suffix++ + ')';
+        state.setlists.push(list);
+      }
+      activeId = restored.setlists[0].id; selectedSong = current().songs[0]?.id; selectedSection = null;
+      persist(); await window.gigman.save(state); savePending = false; saveError = false;
+      message = restored.setlists.length + ' Setliste(n) aus der Sicherung geladen.';
+    } catch (error) { message = archiveError(error); }
+    finally { busy = false; archiveStatus = ''; render(); }
+  })();
+  await archiveTask; archiveTask = null; await hydrate(); if (message) notify(message);
+}
+function saveAs() {
+  if (busy || !state.setlists.length) return;
+  titleEditor?.finish(true);
+  dialog('Speichern unter', '<p>Die Sicherung enthält die MP3s, Songreihenfolge, Sektionen und alle Song-Einstellungen. Sie kann später auf einem anderen Rechner geladen werden.</p><label>Umfang<select name="scope"><option value="current">Aktuelle Setliste</option><option value="all">Alle Setlisten</option></select></label>', async data => {
+    const library = { version: 1, setlists: data.get('scope') === 'all' ? state.setlists : [current()] };
+    stop(); busy = true; archiveStatus = 'Sicherung wird gespeichert …'; render();
+    archiveTask = (async () => {
+      let message;
+      try { const result = await window.gigman.exportArchive(library); if (result) message = result.setlists + ' Setliste(n) mit ' + result.songs + ' Songs gesichert.'; }
+      catch (error) { message = archiveError(error); }
+      finally { busy = false; archiveStatus = ''; render(); if (message) notify(message); }
+    })();
+    await archiveTask; archiveTask = null;
+  }, 'Speichern unter …');
+}
 const actions = {
+  'save-as': saveAs, 'load-archive': loadArchive,
   new: () => dialog('Neue Setliste', '<label>Name der Setliste<input name="name" placeholder="Zum Beispiel: Club-Gig · Oktober" required maxlength="100" autofocus></label><label class="checkbox"><input type="checkbox" name="import" checked> Anschließend MP3-Ordner importieren</label>', async data => {
     const name = data.get('name').trim(); if (!name) throw new Error('Bitte einen Namen eingeben.');
     stop(); const list = { id: crypto.randomUUID(), name, songs: [] }; state.setlists.push(list); activeId = list.id; selectedSong = null; selectedSection = null; persist(); render(); if (data.has('import')) await importAudio(true);
@@ -393,6 +433,7 @@ window.addEventListener('resize', () => document.querySelector('.section-menu')?
 document.addEventListener('scroll', () => document.querySelector('.section-menu')?.remove(), true);
 window.gigman?.onClosing(async () => {
   titleEditor?.finish(true);
+  if (archiveTask) await archiveTask;
   if (downloadActive) await window.gigman.cancelYouTube();
   if (downloadTask) await downloadTask.catch(() => {});
   clearTimeout(saveTimer);

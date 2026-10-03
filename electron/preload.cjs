@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('gigman', {
   load: () => ipcRenderer.invoke('library:load'),
   save: state => ipcRenderer.invoke('library:save', state),
+  exportArchive: library => ipcRenderer.invoke('archive:export', library),
+  importArchive: () => ipcRenderer.invoke('archive:import'),
   importFolder: () => ipcRenderer.invoke('audio:import-folder'),
   importFiles: () => ipcRenderer.invoke('audio:import-files'),
   downloadYouTube: url => ipcRenderer.invoke('youtube:download', url),

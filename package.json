@@ -1,0 +1,63 @@
+{
+  "name": "gigman",
+  "version": "1.1.1",
+  "description": "Setlisten und Gitarrenübungen mit lokalen MP3s",
+  "author": "GigMan",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/TinoBickel/GigMan.git" },
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "npm run build && node scripts/start.mjs",
+    "postinstall": "node node_modules/electron/install.js",
+    "setup:tools": "node scripts/setup-tools.mjs",
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "test": "node --test tests/*.test.mjs",
+    "test:desktop": "npm run build && node tests/desktop.mjs",
+    "dist:win": "npm run setup:tools && npm run build && electron-builder --win nsis --x64 --publish never",
+    "dist:linux": "npm run setup:tools && npm run build && electron-builder --linux AppImage deb --x64 --publish never"
+  },
+  "dependencies": {
+    "@soundtouchjs/audio-worklet": "2.1.1"
+  },
+  "devDependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "electron": "44.5.1",
+    "electron-builder": "^26.0.12",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
+    "playwright": "^1.58.2",
+    "vite": "^7.3.1"
+  },
+  "build": {
+    "appId": "de.gigman.practice",
+    "productName": "GigMan",
+    "directories": {
+      "output": "release"
+    },
+    "publish": [],
+    "extraResources": [{ "from": "tools/runtime", "to": "tools" }],
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "AudioVideo",
+      "maintainer": "GigMan"
+    }
+  }
+}

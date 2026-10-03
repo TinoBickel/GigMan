@@ -1,8 +1,9 @@
 import './style.css';
 import './interactions.css';
 import './compact.css';
+import './song-settings.css';
 import { AudioEngine } from './audio.js';
-import { clamp, time, playlist, moveSong, validateSection, dragSection } from './domain.js';
+import { clamp, time, playlist, moveSong, validateSection, dragSection, songSettings } from './domain.js';
 
 const icons = {
   play: '<path d="m8 5 11 7-11 7z"/>', pause: '<path d="M8 5v14M16 5v14"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
@@ -36,20 +37,20 @@ function persist() {
 function render() {
   titleEditor?.finish(true);
   const list = current(), songs = list?.songs || [], sectionCount = songs.reduce((n, s) => n + s.sections.length, 0);
+  songs.forEach(song => Object.assign(song, songSettings(song)));
   const selected = songById(selectedSong), section = selected?.sections.find(s => s.id === selectedSection);
   app.innerHTML = `<aside class="sidebar"><a class="brand">${icon('guitar')}<span>Gig<span class="accent">Man</span><small>YOUR PRACTICE STUDIO</small></span></a>
     <div class="nav-label">DEINE BIBLIOTHEK <span>${state.setlists.length}</span></div>
     <button class="new-list" data-action="new">${icon('plus')} Neue Setliste</button>
     <nav>${state.setlists.map(l => `<button class="list-link ${l.id === activeId ? 'active' : ''}" data-action="list" data-id="${l.id}">${icon('music')}<span>${esc(l.name)}<small>${l.songs.length} Songs</small></span>${l.id === activeId ? '<i></i>' : ''}</button>`).join('')}</nav>
     <div class="sidebar-bottom"><span class="local-dot"></span> Offline. Auf deiner Bühne.<small>MP3s & Markierungen bleiben lokal.</small></div></aside>
-    <main><header class="topbar"><div class="setlist-summary"><h1 title="${esc(list?.name || 'Willkommen')}">${esc(list?.name || 'Dein Gig beginnt hier.')}</h1><p>${list ? `${songs.length} Songs <span>·</span> ${sectionCount} Übungssektionen <span>·</span> ${time(songs.reduce((n, s) => n + s.duration, 0))} Gesamtlänge` : 'Deine Songs. Deine Übungsstellen.'}</p></div><div class="topbar-actions">${list ? `<button data-action="rename" title="Setliste umbenennen">Umbenennen</button><button data-action="youtube" ${busy ? 'disabled' : ''}>${icon('plus')} YouTube → MP3</button><button class="primary" data-action="import-folder" ${busy ? 'disabled' : ''}>${icon('folder')} ${busy ? 'Import läuft …' : 'Ordner importieren'}</button>` : `<button class="primary" data-action="new">${icon('plus')} Neue Setliste</button>`}<button class="quiet" data-action="help" title="Tastaturkürzel" aria-label="Tastaturkürzel"><kbd>?</kbd></button></div></header>
+    <main><header class="topbar"><div class="setlist-summary"><h1 title="${esc(list?.name || 'Willkommen')}">${esc(list?.name || 'Dein Gig beginnt hier.')}</h1><p>${list ? `${songs.length} Songs <span>·</span> ${sectionCount} Übungssektionen <span>·</span> ${time(songs.reduce((n, s) => n + s.duration, 0))} Gesamtlänge` : 'Deine Songs. Deine Übungsstellen.'}</p></div><div class="mode-switch"><button data-action="mode-song" class="${mode === 'song' ? 'selected' : ''}" title="Setliste mit den Einstellungen jedes Songs abspielen">${icon('music')} Song Mode</button><button data-action="mode-loop" class="${mode === 'loop' ? 'selected' : ''}" title="Ausgewählte Sektion wiederholen">${icon('loop')} Loop Mode</button></div><div class="topbar-actions">${list ? `<button data-action="rename" title="Setliste umbenennen">Umbenennen</button><button data-action="youtube" ${busy ? 'disabled' : ''}>${icon('plus')} YouTube → MP3</button><button class="primary" data-action="import-folder" ${busy ? 'disabled' : ''}>${icon('folder')} ${busy ? 'Import läuft …' : 'Ordner importieren'}</button>` : `<button class="primary" data-action="new">${icon('plus')} Neue Setliste</button>`}<button class="quiet" data-action="help" title="Tastaturkürzel" aria-label="Tastaturkürzel"><kbd>?</kbd></button></div></header>
     <div class="content">
-    <div class="practice-bar"><div class="mode-switch"><button data-action="mode-song" class="${mode === 'song' ? 'selected' : ''}">${icon('music')} Song Mode</button><button data-action="mode-loop" class="${mode === 'loop' ? 'selected' : ''}">${icon('loop')} Loop Mode</button></div><span class="mode-description">${mode === 'song' ? 'Alle Sektionen. In deiner Setlisten-Reihenfolge.' : 'Eine Sektion. Wiederholen, bis sie sitzt.'}</span></div>
-    ${songs.length ? `<div class="table-head"><span>SONG / REIHENFOLGE</span><span>WAVEFORM & ÜBUNGSSEKTIONEN <small>Klick: anhören ab hier · Ziehen: markieren · Ränder: anpassen</small></span></div><div class="song-list">${songs.map((song, i) => songRow(song, i)).join('')}</div><button class="add-song" data-action="import-files" ${busy ? 'disabled' : ''}>${icon('plus')} MP3-Dateien hinzufügen</button>` : `<div class="empty"><div class="empty-icon">${icon('music')}</div><h2>${list ? 'Platz für deine nächste Show.' : 'Mehr spielen. Weniger suchen.'}</h2><p>${list ? 'Importiere einen Ordner mit MP3s. Markiere deine Solos<br>und bring die Songs in deine Reihenfolge.' : 'Erstelle deine erste Setliste und importiere die Songs<br>direkt aus einem Ordner auf deinem Rechner.'}</p><button class="primary" data-action="${list ? 'import-folder' : 'new'}">${icon(list ? 'folder' : 'plus')}${list ? 'MP3-Ordner wählen' : 'Setliste erstellen'}</button><div class="empty-steps"><span>01 <b>Songs importieren</b></span><span>02 <b>Sektionen markieren</b></span><span>03 <b>Gig vorbereiten</b></span></div></div>`}
+    ${songs.length ? `<div class="song-list">${songs.map((song, i) => songRow(song, i)).join('')}</div><button class="add-song" data-action="import-files" ${busy ? 'disabled' : ''}>${icon('plus')} MP3-Dateien hinzufügen</button>` : `<div class="empty"><div class="empty-icon">${icon('music')}</div><h2>${list ? 'Platz für deine nächste Show.' : 'Mehr spielen. Weniger suchen.'}</h2><p>${list ? 'Importiere einen Ordner mit MP3s. Markiere deine Solos<br>und bring die Songs in deine Reihenfolge.' : 'Erstelle deine erste Setliste und importiere die Songs<br>direkt aus einem Ordner auf deinem Rechner.'}</p><button class="primary" data-action="${list ? 'import-folder' : 'new'}">${icon(list ? 'folder' : 'plus')}${list ? 'MP3-Ordner wählen' : 'Setliste erstellen'}</button><div class="empty-steps"><span>01 <b>Songs importieren</b></span><span>02 <b>Sektionen markieren</b></span><span>03 <b>Gig vorbereiten</b></span></div></div>`}
     <div class="content-foot"><span>${icon('clock')} Wechselpausen gelten zwischen Songs.</span><span id="saved">${saveError ? 'Speichern fehlgeschlagen' : 'Lokal gespeichert'}</span>${list ? '<button class="text-danger" data-action="delete-list">Setliste löschen</button>' : ''}</div></div></main>
     <footer class="transport"><div class="now-playing"><div class="track-icon">${icon(mode === 'loop' ? 'loop' : 'guitar')}</div><div><strong>${esc(selected?.title || 'Wähle einen Song')}</strong><small id="play-status">${esc(section?.name || (selected ? 'Ganzer Song' : 'Dein nächster guter Take wartet.'))}</small></div></div>
     <div class="player-buttons"><button class="square" data-action="stop" title="Stop (Esc)">${icon('stop')}</button><button class="play-button" data-action="play" title="Abspielen / Pause (Leertaste)" ${!songs.length ? 'disabled' : ''}>${icon(playing ? 'pause' : 'play')}</button><button class="square" data-action="next" title="Nächste Sektion (N)">${icon('next')}</button></div>
-    <div class="player-settings"><label>Tempo <div><input id="tempo" aria-label="Tempo" type="range" min="0.5" max="1.25" step="0.05" value="${state.settings.tempo}"><output>${Math.round(state.settings.tempo * 100)}%</output></div></label><label>Tonhöhe <div class="stepper"><button data-action="pitch-down" aria-label="Halbton tiefer">−</button><output id="pitch-value">${state.settings.pitch > 0 ? '+' : ''}${state.settings.pitch} HT</output><button data-action="pitch-up" aria-label="Halbton höher">+</button></div></label><label>Vorzählen <div class="count-settings"><select id="count" aria-label="Vorzähl-Schläge">${[0, 2, 4, 8].map(n => `<option value="${n}" ${n === state.settings.count ? 'selected' : ''}>${n ? `${n} Schläge` : 'Aus'}</option>`).join('')}</select><input id="bpm" aria-label="Vorzähltempo BPM" title="Vorzähltempo in BPM" type="number" min="30" max="240" value="${state.settings.bpm}"><small>BPM</small></div></label><label class="volume">Lautstärke<input id="volume" aria-label="Lautstärke" type="range" min="0" max="1" step="0.01" value="${state.settings.volume}"></label></div></footer>
+    <div class="player-settings"><label>Vorzählen <div class="count-settings"><select id="count" aria-label="Vorzähl-Schläge">${[0, 2, 4, 8].map(n => `<option value="${n}" ${n === state.settings.count ? 'selected' : ''}>${n ? `${n} Schläge` : 'Aus'}</option>`).join('')}</select><input id="bpm" aria-label="Vorzähltempo BPM" title="Vorzähltempo in BPM" type="number" min="30" max="240" value="${state.settings.bpm}"><small>BPM</small></div></label><label class="volume">Lautstärke<input id="volume" aria-label="Lautstärke" type="range" min="0" max="1" step="0.01" value="${state.settings.volume}"></label></div></footer>
     <dialog id="dialog"></dialog><div id="toast" role="status"></div>`;
   requestAnimationFrame(drawWaves);
 }
@@ -61,7 +62,11 @@ function songRow(song, i) {
     <button class="preview-button ${previewSong === song.id && playing ? 'preview-active' : ''}" data-action="preview" data-id="${song.id}" title="Song vollständig ohne Loop anhören">${icon('play')} Song anhören</button>
     <label class="gap">${icon('clock')}<input aria-label="Wechselpause für ${esc(song.title)}" class="gap-input" data-id="${song.id}" type="number" min="0" max="600" value="${song.gap}"> s Wechselpause</label></div></div>
     <div class="wave-area"><div class="wave" data-id="${song.id}"><canvas></canvas>${song.sections.map((s, j) => `<button class="region color-${j % 4} ${chosen && selectedSection === s.id ? 'selected-region' : ''}" data-action="section" data-song="${song.id}" data-id="${s.id}" style="left:${s.start / song.duration * 100}%;width:${(s.end - s.start) / song.duration * 100}%" title="${esc(s.name)} · ${s.start.toFixed(2)}–${s.end.toFixed(2)} s · Ziehen: verschieben · Ränder: Größe ändern"><span class="region-label">${esc(s.name)}</span><span class="region-handle handle-start" data-edge="start" title="Start verschieben"></span><span class="region-handle handle-end" data-edge="end" title="Ende verschieben"></span></button>`).join('')}<div class="playhead" hidden></div></div>
-    <div class="wave-times"><span>0:00</span><span>${waves.has(song.id) ? time(song.duration) : failures.has(song.id) ? 'Datei prüfen' : 'Waveform wird geladen …'}</span></div></div>
+    <div class="wave-times"><span>0:00</span><span>${waves.has(song.id) ? time(song.duration) : failures.has(song.id) ? 'Datei prüfen' : 'Waveform wird geladen …'}</span></div><div class="song-controls">
+      <label>Tempo <input class="song-tempo" data-id="${song.id}" aria-label="Tempo für ${esc(song.title)}" type="range" min="0.5" max="1.25" step="0.05" value="${song.tempo}"><output>${Math.round(song.tempo * 100)}%</output></label>
+      <label>Tonhöhe <div class="stepper"><button data-action="pitch-down" data-id="${song.id}" aria-label="${esc(song.title)}: Halbton tiefer">−</button><output>${song.pitch > 0 ? '+' : ''}${song.pitch} HT</output><button data-action="pitch-up" data-id="${song.id}" aria-label="${esc(song.title)}: Halbton höher">+</button></div></label>
+      <label>Abspielen <select class="song-play-mode" data-id="${song.id}" aria-label="Abspielumfang für ${esc(song.title)}"><option value="full" ${song.playMode === 'full' ? 'selected' : ''}>Komplett</option><option value="loops" ${song.playMode === 'loops' ? 'selected' : ''}>Loops</option></select></label>
+    </div></div>
     <div class="row-actions"><button class="square" data-action="new-section" data-id="${song.id}" title="Sektion mit Zeitangaben hinzufügen">${icon('plus')}</button><button class="square" data-action="delete-song" data-id="${song.id}" title="Song aus Setliste entfernen">${icon('trash')}</button></div></article>`;
 }
 function editSongTitle(button) {
@@ -169,7 +174,7 @@ async function startItem(count = 0) {
   const token = ++run;
   playing = true; paused = false; selectedSong = song.id; selectedSection = item.id;
   const start = resumeAt ?? item.start; resumeAt = null; render();
-  try { await engine.play(song, start, item.end, state.settings, mode === 'loop' && !previewSong, count, () => advance(token), item.start); }
+  try { await engine.play(song, start, item.end, { ...state.settings, ...songSettings(song) }, mode === 'loop' && !previewSong, count, () => advance(token), item.start); }
   catch { if (token === run) { stop(); render(); notify(`„${song.title}“ konnte nicht abgespielt werden. Bitte MP3 prüfen.`); } }
 }
 function advance(token) {
@@ -250,16 +255,28 @@ const actions = {
   'close-dialog': async () => { if (downloadActive) { document.querySelector('#download-status').textContent = 'Download wird abgebrochen …'; await window.gigman.cancelYouTube(); } else document.querySelector('#dialog').close(); },
   play: togglePlay, stop: () => { stop(); render(); },
   next: () => { if (!playing && !paused) return; if (previewSong) { stop(); render(); return; } engine.stop(); clearTimeout(gapTimer); gapUntil = 0; resumeAt = null; if (mode === 'loop') startItem(0); else { queueIndex++; startItem(state.settings.count); } },
-  'pitch-down': () => setting('pitch', clamp(state.settings.pitch - 1, -12, 12)),
-  'pitch-up': () => setting('pitch', clamp(state.settings.pitch + 1, -12, 12)),
+  'pitch-down': el => songSetting(el.dataset.id, 'pitch', clamp(songById(el.dataset.id).pitch - 1, -12, 12)),
+  'pitch-up': el => songSetting(el.dataset.id, 'pitch', clamp(songById(el.dataset.id).pitch + 1, -12, 12)),
   help: () => dialog('Mit Gitarre in der Hand', '<div class="shortcuts"><p><kbd>Leertaste</kbd> Abspielen / Pause</p><p><kbd>Esc</kbd> Stop</p><p><kbd>N</kbd> Nächste Sektion</p><p><kbd>L</kbd> Song / Loop Mode wechseln</p><p><kbd>− / +</kbd> Tempo ändern</p></div><p>„Song anhören“: ganzer Track ohne Loop.<br>Klick in die freie Waveform: ab dieser Stelle anhören.<br>Bereich ziehen: Sektion anlegen.<br>Sektion in der Mitte ziehen: verschieben. Randgriffe: Größe ändern.<br>Doppelklick auf Sektion: Namen und genaue Zeiten bearbeiten.<br>Song am Griff links ziehen: Reihenfolge ändern.</p>', () => document.querySelector('#dialog').close(), 'Verstanden')
 };
 function setting(key, value) {
-  const position = playing && !gapUntil ? engine.position() : null;
   state.settings[key] = value; persist();
   if (key === 'volume') { engine.setVolume(value); return; }
-  if (playing && !gapUntil && ['pitch', 'tempo'].includes(key)) { resumeAt = engine.countRemaining(state.settings.bpm) ? queue[queueIndex].start : position; startItem(0); }
-  else render();
+  render();
+}
+function songSetting(id, key, value) {
+  const song = songById(id); if (!song) return;
+  const active = (playing || paused) && queue[queueIndex]?.songId === id;
+  const position = playing && !gapUntil ? engine.position() : resumeAt;
+  song[key] = value; persist();
+  if (key === 'playMode') {
+    if ((playing || paused) && !previewSong && mode === 'song') stop();
+    render(); return;
+  }
+  if (active && playing && !gapUntil) {
+    resumeAt = engine.countRemaining(state.settings.bpm) ? queue[queueIndex].start : position;
+    startItem(0);
+  } else render();
 }
 app.addEventListener('click', async e => {
   const el = e.target.closest('[data-action]'); if (!el || el.disabled || locked || performance.now() < suppressClickUntil) return;
@@ -272,11 +289,13 @@ app.addEventListener('dblclick', e => {
 });
 app.addEventListener('change', e => {
   const el = e.target;
+  if (el.classList.contains('song-tempo')) { songSetting(el.dataset.id, 'tempo', clamp(Number(el.value), 0.5, 1.25)); return; }
+  if (el.classList.contains('song-play-mode')) { songSetting(el.dataset.id, 'playMode', el.value === 'full' ? 'full' : 'loops'); return; }
   if (el.classList.contains('gap-input')) { songById(el.dataset.id).gap = clamp(Number(el.value) || 0, 0, 600); el.value = songById(el.dataset.id).gap; persist(); }
-  const limits = { tempo: [0.5, 1.25], bpm: [30, 240], count: [0, 8], volume: [0, 1] };
+  const limits = { bpm: [30, 240], count: [0, 8], volume: [0, 1] };
   if (limits[el.id]) setting(el.id, clamp(Number(el.value) || 0, ...limits[el.id]));
 });
-app.addEventListener('input', e => { if (e.target.id === 'volume') engine.setVolume(Number(e.target.value)); if (e.target.id === 'tempo') e.target.nextElementSibling.textContent = `${Math.round(Number(e.target.value) * 100)}%`; });
+app.addEventListener('input', e => { if (e.target.id === 'volume') engine.setVolume(Number(e.target.value)); if (e.target.classList.contains('song-tempo')) e.target.nextElementSibling.textContent = `${Math.round(Number(e.target.value) * 100)}%`; });
 let dragged;
 app.addEventListener('dragstart', e => { const el = e.target.closest('.drag-handle'); if (!el) return; dragged = el.dataset.id; e.dataTransfer.setData('text/plain', dragged); e.dataTransfer.effectAllowed = 'move'; });
 app.addEventListener('dragover', e => { const row = e.target.closest('.song-row'); if (row && dragged) { e.preventDefault(); row.classList.add('drop-target'); } });
@@ -341,7 +360,7 @@ document.addEventListener('keydown', async e => {
   if (key === 'p' && !e.repeat) { e.preventDefault(); await preview(songById(selectedSong)); return; }
   const action = { ' ': 'play', escape: 'stop', n: 'next', l: mode === 'song' ? 'mode-loop' : 'mode-song', '?': 'help' }[key];
   if (action && !e.repeat) { e.preventDefault(); locked = true; try { await actions[action](); } finally { locked = false; } }
-  if (['-', '+', '='].includes(key)) { e.preventDefault(); setting('tempo', clamp(Math.round((state.settings.tempo + (key === '-' ? -0.05 : 0.05)) * 100) / 100, 0.5, 1.25)); }
+  if (['-', '+', '='].includes(key) && songById(selectedSong)) { e.preventDefault(); const song = songById(selectedSong); songSetting(song.id, 'tempo', clamp(Math.round((song.tempo + (key === '-' ? -0.05 : 0.05)) * 100) / 100, 0.5, 1.25)); }
 });
 window.addEventListener('resize', drawWaves);
 window.gigman?.onClosing(async () => {
@@ -371,8 +390,13 @@ async function boot() {
     state = await window.gigman.load();
     if (state.version !== 1 || !Array.isArray(state.setlists)) throw new Error('Unbekanntes Bibliotheksformat');
     state.settings = { tempo: 1, pitch: 0, count: 4, bpm: 100, volume: 0.8, ...state.settings };
+    let migrated = false;
+    for (const list of state.setlists) for (const song of list.songs) {
+      if (song.tempo == null || song.pitch == null || song.playMode == null) { Object.assign(song, songSettings(song, state.settings)); migrated = true; }
+    }
     activeId = state.setlists[0]?.id; selectedSong = current()?.songs[0]?.id;
     engine.setVolume(state.settings.volume); render(); tick(); await hydrate();
+    if (migrated) persist();
   } catch (error) { app.innerHTML = `<div class="boot-error"><h1>Bibliothek konnte nicht geladen werden.</h1><p>${esc(error.message)}</p><p>Die gespeicherte Datei wird nicht überschrieben.</p></div>`; }
 }
 boot();

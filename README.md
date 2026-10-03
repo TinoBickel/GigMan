@@ -21,7 +21,7 @@ Der Starter baut die Oberfläche und öffnet das Desktop-Fenster. Beim Installie
    **Doppelklick auf einen Songnamen** macht ihn direkt in der Zeile editierbar. Enter oder Klick außerhalb speichert, Escape bricht ab. Leere Namen werden nicht übernommen.
 3. Über **Song anhören** den ganzen Track ohne Loop abspielen, auch wenn bereits Sektionen existieren oder Loop Mode aktiv ist. Ein Klick in die freie Waveform startet die Vorschau an dieser Stelle. Leertaste pausiert und setzt sie fort; mit **P** lässt sich der ausgewählte Song ebenfalls anhören. Die Vorschau endet nach diesem Song.
 4. Bereich in der Waveform ziehen, Name und Grenzen festlegen. Sektion in der **Mitte ziehen** verschiebt sie mit unveränderter Länge. Die **Griffe am linken und rechten Rand** verschieben Start bzw. Ende, um sie zu vergrößern oder zu verkleinern. Änderungen werden automatisch gespeichert. Wird ein laufender Loop verändert, startet er mit den neuen Grenzen erneut. **Doppelklick auf eine Sektion** öffnet die Bearbeitung und ermöglicht das Löschen. Die Plus-Taste neben der Waveform erlaubt genaue Zeitangaben, auch bei kurzen Sektionen.
-5. **Song Mode** spielt ab Beginn der Setliste alle Sektionen in zeitlicher Reihenfolge. Nicht markierte Zwischenstücke werden übersprungen. Songs ohne Sektionen werden komplett gespielt.
+5. In jeder Songzeile **Tempo**, **Tonhöhe** und **Abspielen: Komplett / Loops** einstellen. Im **Song Mode** oben durchläuft die App die Setliste und verwendet die Einstellungen des jeweiligen Songs: **Komplett** spielt den ganzen Track einschließlich unmarkierter Stellen; **Loops** spielt seine Sektionen einmal in zeitlicher Reihenfolge. Songs ohne Sektionen werden immer komplett gespielt. Beim ersten Öffnen werden bisherige globale Tempo- und Tonhöhenwerte in die Songs übernommen.
 6. **Loop Mode** wiederholt die angeklickte Sektion. Vorzählen erfolgt beim ersten Start, nicht bei jeder Wiederholung.
 7. Pro Song die **Wechselpause** zwischen 0 und 600 Sekunden einstellen. Sie beginnt nach der letzten Sektion vor dem nächsten Song. Danach wird für den nächsten Song erneut vorgezählt. Nach dem letzten Song endet die Wiedergabe.
 
@@ -33,7 +33,7 @@ Unterstützt werden einzelne öffentliche YouTube-Videos einschließlich Kurzlin
 
 Die Windows-Pakete enthalten yt-dlp, FFmpeg und FFprobe. Bei Nutzung des Quellcodes bereitet `npm run setup:tools` diese Werkzeuge für das aktuelle Betriebssystem vor. yt-dlp wird aus dem offiziellen Release geladen und per SHA-256 geprüft. Mit `npm run setup:tools -- --update` kann die Download-Komponente aktualisiert werden; ein neues Paket muss anschließend neu gebaut werden.
 
-**Tempo:** 50–125 %, unabhängig von der Tonhöhe. **Tonhöhe:** −12 bis +12 Halbtöne. **Vorzählen:** aus, 2, 4 oder 8 hörbare Schläge bei 30–240 BPM. BPM steuert das Vorzählen und wird nicht aus der MP3 ermittelt. Änderungen an Tempo oder Tonhöhe während der Wiedergabe starten die Audioverarbeitung an der aktuellen Stelle neu; dabei kann eine kurze Unterbrechung auftreten.
+**Tempo pro Song:** 50–125 %, unabhängig von der Tonhöhe. **Tonhöhe pro Song:** −12 bis +12 Halbtöne. Diese Werte gelten auch für Vorschau und Loop Mode. **Vorzählen:** aus, 2, 4 oder 8 hörbare Schläge bei 30–240 BPM. BPM steuert das Vorzählen und wird nicht aus der MP3 ermittelt. Änderungen an Tempo oder Tonhöhe des aktuell laufenden Songs starten die Audioverarbeitung an der aktuellen Stelle neu; dabei kann eine kurze Unterbrechung auftreten. Ein Wechsel von Komplett / Loops während eines Setlistendurchlaufs hält ihn an; der nächste Start verwendet die neue Auswahl.
 
 Während einer Gitarrenwechsel-Pause beendet die Pause-Taste den Durchlauf. Ein erneuter Start beginnt die Setliste von vorn. Während der Songwiedergabe pausiert die Taste an der aktuellen Position und setzt dort fort.
 
@@ -44,7 +44,7 @@ Während einer Gitarrenwechsel-Pause beendet die Pause-Taste den Durchlauf. Ein 
 | Esc | Stop |
 | N | Nächste Sektion; im Loop neu starten |
 | L | Song / Loop Mode wechseln |
-| − / + | Tempo um 5 Prozentpunkte ändern |
+| − / + | Tempo des ausgewählten Songs um 5 Prozentpunkte ändern |
 | ? | Hilfe |
 
 ## Speicherung

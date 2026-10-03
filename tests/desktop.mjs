@@ -41,6 +41,9 @@ try {
   assert.equal(await page.locator('.topbar [data-action="rename"]').count(), 1);
   assert.equal(await page.locator('.topbar [data-action="youtube"]').count(), 1);
   assert.equal(await page.locator('.topbar [data-action="import-folder"]').count(), 1);
+  assert.equal(await page.locator('.topbar [data-action="mode-song"]').count(), 1);
+  assert.equal(await page.locator('.topbar [data-action="mode-loop"]').count(), 1);
+  assert.equal(await page.locator('.table-head, .practice-bar').count(), 0);
   assert.equal(Math.round((await page.locator('.song-row').first().boundingBox()).height), 140, 'Songzeile ist 20% kleiner');
   await page.locator('[data-action="select-song"]').first().dblclick();
   await page.locator('.song-name-editor').fill('Midnight Drive · Übung');
@@ -59,8 +62,8 @@ try {
   assert.ok((await fs.stat(path.join(data, 'audio', copied[0]))).size > 10000);
   const wave = page.locator('.song-row').first().locator('.wave');
   const rect = await wave.boundingBox();
-  await page.mouse.move(rect.x + rect.width * 0.1, rect.y + 55);
-  await page.mouse.down(); await page.mouse.move(rect.x + rect.width * 0.3, rect.y + 55, { steps: 12 }); await page.mouse.up();
+  await page.mouse.move(rect.x + rect.width * 0.1, rect.y + rect.height * 0.65);
+  await page.mouse.down(); await page.mouse.move(rect.x + rect.width * 0.3, rect.y + rect.height * 0.65, { steps: 12 }); await page.mouse.up();
   await page.locator('[name="name"]').fill('Solo 1');
   await page.locator('[name="start"]').fill('0.2'); await page.locator('[name="end"]').fill('0.6');
   await page.locator('dialog button[type="submit"]').click();
@@ -75,7 +78,7 @@ try {
     window.audioStarts = [];
     const original = AudioBufferSourceNode.prototype.start;
     AudioBufferSourceNode.prototype.start = function (when, offset, duration) {
-      window.audioStarts.push({ when, offset, duration, loop: this.loop, loopStart: this.loopStart, loopEnd: this.loopEnd, tempo: this.playbackRate.value });
+      window.audioStarts.push({ when, offset, duration, loop: this.loop, loopStart: this.loopStart, loopEnd: this.loopEnd, tempo: this.playbackRate.value, pitch: window.soundtouch?.parameters.get('pitchSemitones').value });
       return original.call(this, when, offset, duration);
     };
     const connect = AudioNode.prototype.connect;
@@ -91,7 +94,7 @@ try {
   assert.equal(previewStart.loop, false, 'Vollständige Vorschau funktioniert auch im Loop Mode');
   assert.ok(previewStart.duration > 8, 'Vorschau überspringt keine unmarkierten Songteile');
   let previewWave = await page.locator('.wave').first().boundingBox();
-  await page.mouse.click(previewWave.x + previewWave.width * 0.65, previewWave.y + 65);
+  await page.mouse.click(previewWave.x + previewWave.width * 0.65, previewWave.y + previewWave.height * 0.65);
   await page.waitForFunction(() => window.audioStarts.length === 2);
   previewStart = await page.evaluate(() => window.audioStarts.at(-1));
   assert.ok(previewStart.offset > 5 && !previewStart.loop, 'Waveform-Klick sucht eine Stelle ohne Loop');
@@ -99,6 +102,13 @@ try {
   await page.waitForFunction(() => window.audioStarts.length === 3);
   assert.equal((await page.evaluate(() => window.audioStarts.at(-1))).loop, false, 'Vorschau bleibt nach Pause ohne Loop');
   await page.keyboard.press('Escape'); await page.locator('[data-action="mode-song"]').click();
+  await page.locator('.song-tempo').last().fill('1.1'); await page.locator('.song-tempo').last().dispatchEvent('change');
+  await page.locator('[data-action="pitch-up"]').last().click(); await page.locator('[data-action="pitch-up"]').last().click();
+  await page.locator('.song-play-mode').last().selectOption('full');
+  await page.locator('.song-row').last().locator('[data-action="new-section"]').click();
+  await page.locator('[name="name"]').fill('Nur ein Testbereich');
+  await page.locator('[name="start"]').fill('0.3'); await page.locator('[name="end"]').fill('0.5');
+  await page.locator('dialog button[type="submit"]').click();
   await page.evaluate(() => { window.audioStarts = []; });
   await page.locator('[data-action="play"]').click();
   await page.waitForFunction(() => window.audioStarts.length === 2);
@@ -106,11 +116,15 @@ try {
   await page.waitForFunction(() => window.audioStarts.length === 3);
   let starts = await page.evaluate(() => window.audioStarts);
   assert.deepEqual(starts.map(s => s.offset), [0.2, 1, 0]);
+  assert.equal(starts[0].tempo, 1); assert.equal(starts[0].pitch, 0);
+  assert.ok(starts[2].duration > 5, 'Komplett spielt auch Songs mit Sektionen vollständig');
+  assert.ok(Math.abs(starts[2].tempo - 1.1) < 0.001); assert.equal(starts[2].pitch, 2, 'Jeder Song verwendet seine eigenen Audiowerte');
   assert.ok(starts[2].when - starts[1].when > 1.3, 'Wechselpause zwischen Songs');
   await page.keyboard.press('Escape');
+  await page.locator('.region').last().dblclick(); await page.locator('[data-action="delete-section"]').click();
   await page.locator('.region').first().click(); await page.locator('[data-action="mode-loop"]').click();
-  await page.locator('#tempo').fill('0.75'); await page.locator('#tempo').dispatchEvent('change');
-  await page.locator('[data-action="pitch-down"]').click();
+  await page.locator('.song-tempo').first().fill('0.75'); await page.locator('.song-tempo').first().dispatchEvent('change');
+  await page.locator('[data-action="pitch-down"]').first().click();
   await page.locator('[data-action="play"]').click();
   await page.waitForFunction(() => window.audioStarts.at(-1).loop);
   starts = await page.evaluate(() => window.audioStarts);
@@ -157,7 +171,10 @@ try {
   page = await launch();
   await page.waitForFunction(() => document.querySelectorAll('.region').length === 2);
   assert.equal(await page.locator('h1').textContent(), 'Friday Night · Live');
-  assert.equal(await page.locator('#tempo').inputValue(), '0.75');
+  assert.equal(await page.locator('.song-tempo').last().inputValue(), '0.75');
+  assert.equal(await page.locator('.song-tempo').first().inputValue(), '1.1');
+  assert.equal(await page.locator('.song-play-mode').first().inputValue(), 'full');
+  assert.equal(await page.locator('.song-play-mode').last().inputValue(), 'loops');
   assert.equal(await page.locator('.gap-input').last().inputValue(), '1');
   assert.equal(await page.locator('[data-action="select-song"]').last().textContent(), 'Midnight Drive · Live', 'Songname wird nach Neustart wiederhergestellt');
   const traversal = await page.evaluate(async () => (await fetch('gigman://app/audio/%2e%2e%2flibrary.json')).status);

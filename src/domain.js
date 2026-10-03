@@ -1,7 +1,11 @@
 export const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 export function time(n) { n = Math.max(0, n || 0); return `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, '0')}`; }
 export function ranges(song) {
-  return song.sections.length ? [...song.sections].sort((a, b) => a.start - b.start).map(s => ({ ...s, songId: song.id })) : [{ id: 'full', name: 'Ganzer Song', start: 0, end: song.duration, songId: song.id }];
+  return song.playMode !== 'full' && song.sections.length ? [...song.sections].sort((a, b) => a.start - b.start).map(s => ({ ...s, songId: song.id })) : [{ id: 'full', name: 'Ganzer Song', start: 0, end: song.duration, songId: song.id }];
+}
+export function songSettings(song, legacy = {}) {
+  const tempo = song.tempo ?? legacy.tempo ?? 1, pitch = song.pitch ?? legacy.pitch ?? 0;
+  return { tempo: clamp(Number(tempo) || 1, 0.5, 1.25), pitch: clamp(Math.round(Number(pitch) || 0), -12, 12), playMode: song.playMode === 'full' ? 'full' : 'loops' };
 }
 export function playlist(songs) { return songs.flatMap(ranges); }
 export function moveSong(songs, id, target) {

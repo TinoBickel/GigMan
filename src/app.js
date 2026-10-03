@@ -3,6 +3,7 @@ import './interactions.css';
 import './compact.css';
 import './song-settings.css';
 import './song-transport.css';
+import brandLogo from '../images/TinoLogo-transparent.png';
 import { AudioEngine } from './audio.js';
 import { clamp, time, ranges, playlist, moveSong, validateSection, dragSection, songSettings } from './domain.js';
 
@@ -42,7 +43,7 @@ function render() {
   titleEditor?.finish(true);
   const list = current(), songs = list?.songs || [], sectionCount = songs.reduce((n, s) => n + s.sections.length, 0);
   songs.forEach(song => Object.assign(song, songSettings(song)));
-  app.innerHTML = `<aside class="sidebar"><a class="brand">${icon('guitar')}<span>Gig<span class="accent">Man</span><small>YOUR PRACTICE STUDIO</small></span></a>
+  app.innerHTML = `<aside class="sidebar"><a class="brand"><img class="brand-logo" src="${brandLogo}" alt=""><span>Gig<span class="accent">Man</span><small>YOUR PRACTICE STUDIO</small></span></a>
     <div class="nav-label">DEINE BIBLIOTHEK <span>${state.setlists.length}</span></div>
     <button class="new-list" data-action="new">${icon('plus')} Neue Setliste</button>
     <nav>${state.setlists.map(l => `<button class="list-link ${l.id === activeId ? 'active' : ''}" data-action="list" data-id="${l.id}">${icon('music')}<span>${esc(l.name)}<small>${l.songs.length} Songs</small></span>${l.id === activeId ? '<i></i>' : ''}</button>`).join('')}</nav>

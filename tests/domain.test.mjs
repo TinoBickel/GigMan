@@ -38,6 +38,6 @@ test('Gemischte Setliste berücksichtigt Komplett / Loops pro Song', () => {
   ]).map(s => [s.songId, s.start, s.end]), [['full', 0, 100], ['loops', 20, 30], ['empty', 0, 80]]);
 });
 test('Songwerte übernehmen alte globale Einstellungen nur für fehlende Werte', () => {
-  assert.deepEqual(songSettings({}, { tempo: 0.75, pitch: -2 }), { tempo: 0.75, pitch: -2, playMode: 'loops' });
-  assert.deepEqual(songSettings({ tempo: 1.1, pitch: 3, playMode: 'full' }, { tempo: 0.75, pitch: -2 }), { tempo: 1.1, pitch: 3, playMode: 'full' });
+  assert.deepEqual(songSettings({}, { tempo: 0.75, pitch: -2, count: 2, bpm: 120, volume: 0.4 }), { tempo: 0.75, pitch: -2, playMode: 'loops', count: 2, bpm: 120, volume: 0.4 });
+  assert.deepEqual(songSettings({ tempo: 1.1, pitch: 3, playMode: 'full', volume: 0 }, { tempo: 0.75, pitch: -2 }), { tempo: 1.1, pitch: 3, playMode: 'full', count: 4, bpm: 100, volume: 0 });
 });

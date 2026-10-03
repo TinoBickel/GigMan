@@ -2,8 +2,9 @@ import './style.css';
 import './interactions.css';
 import './compact.css';
 import './song-settings.css';
+import './song-transport.css';
 import { AudioEngine } from './audio.js';
-import { clamp, time, playlist, moveSong, validateSection, dragSection, songSettings } from './domain.js';
+import { clamp, time, ranges, playlist, moveSong, validateSection, dragSection, songSettings } from './domain.js';
 
 const icons = {
   play: '<path d="m8 5 11 7-11 7z"/>', pause: '<path d="M8 5v14M16 5v14"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
@@ -17,6 +18,7 @@ const app = document.querySelector('#app'), engine = new AudioEngine();
 let state, activeId, selectedSong, selectedSection, mode = 'song', busy = false, locked = false;
 let playing = false, paused = false, queue = [], queueIndex = 0, resumeAt = null, gapTimer, gapUntil = 0, run = 0;
 let previewSong = null, suppressClickUntil = 0;
+let playbackScope = null;
 let downloadActive = false, downloadTask = null;
 let saveTimer, savePending = false, saveError = false;
 let titleEditor = null;
@@ -38,19 +40,15 @@ function render() {
   titleEditor?.finish(true);
   const list = current(), songs = list?.songs || [], sectionCount = songs.reduce((n, s) => n + s.sections.length, 0);
   songs.forEach(song => Object.assign(song, songSettings(song)));
-  const selected = songById(selectedSong), section = selected?.sections.find(s => s.id === selectedSection);
   app.innerHTML = `<aside class="sidebar"><a class="brand">${icon('guitar')}<span>Gig<span class="accent">Man</span><small>YOUR PRACTICE STUDIO</small></span></a>
     <div class="nav-label">DEINE BIBLIOTHEK <span>${state.setlists.length}</span></div>
     <button class="new-list" data-action="new">${icon('plus')} Neue Setliste</button>
     <nav>${state.setlists.map(l => `<button class="list-link ${l.id === activeId ? 'active' : ''}" data-action="list" data-id="${l.id}">${icon('music')}<span>${esc(l.name)}<small>${l.songs.length} Songs</small></span>${l.id === activeId ? '<i></i>' : ''}</button>`).join('')}</nav>
     <div class="sidebar-bottom"><span class="local-dot"></span> Offline. Auf deiner Bühne.<small>MP3s & Markierungen bleiben lokal.</small></div></aside>
-    <main><header class="topbar"><div class="setlist-summary"><h1 title="${esc(list?.name || 'Willkommen')}">${esc(list?.name || 'Dein Gig beginnt hier.')}</h1><p>${list ? `${songs.length} Songs <span>·</span> ${sectionCount} Übungssektionen <span>·</span> ${time(songs.reduce((n, s) => n + s.duration, 0))} Gesamtlänge` : 'Deine Songs. Deine Übungsstellen.'}</p></div><div class="mode-switch"><button data-action="mode-song" class="${mode === 'song' ? 'selected' : ''}" title="Setliste mit den Einstellungen jedes Songs abspielen">${icon('music')} Song Mode</button><button data-action="mode-loop" class="${mode === 'loop' ? 'selected' : ''}" title="Ausgewählte Sektion wiederholen">${icon('loop')} Loop Mode</button></div><div class="topbar-actions">${list ? `<button data-action="rename" title="Setliste umbenennen">Umbenennen</button><button data-action="youtube" ${busy ? 'disabled' : ''}>${icon('plus')} YouTube → MP3</button><button class="primary" data-action="import-folder" ${busy ? 'disabled' : ''}>${icon('folder')} ${busy ? 'Import läuft …' : 'Ordner importieren'}</button>` : `<button class="primary" data-action="new">${icon('plus')} Neue Setliste</button>`}<button class="quiet" data-action="help" title="Tastaturkürzel" aria-label="Tastaturkürzel"><kbd>?</kbd></button></div></header>
+    <main><header class="topbar"><div class="setlist-summary"><h1 title="${esc(list?.name || 'Willkommen')}">${esc(list?.name || 'Dein Gig beginnt hier.')}</h1><p>${list ? `${songs.length} Songs <span>·</span> ${sectionCount} Übungssektionen <span>·</span> ${time(songs.reduce((n, s) => n + s.duration, 0))} Gesamtlänge` : 'Deine Songs. Deine Übungsstellen.'}</p></div><div class="mode-switch"><button data-action="mode-song" class="${mode === 'song' ? 'selected' : ''}" title="Setliste mit den Einstellungen jedes Songs abspielen">${icon('music')} Song Mode</button><button data-action="mode-loop" class="${mode === 'loop' ? 'selected' : ''}" title="Ausgewählte Sektion wiederholen">${icon('loop')} Loop Mode</button></div><div class="setlist-player"><div class="setlist-buttons"><button class="play-button" data-action="setlist-start" title="Ganze Setliste starten / fortsetzen" aria-label="Setliste starten" ${!songs.length ? 'disabled' : ''}>${icon('play')}</button><button class="square" data-action="setlist-pause" title="Setliste pausieren" aria-label="Setliste pausieren" ${!(playing && playbackScope === 'setlist') ? 'disabled' : ''}>${icon('pause')}</button><button class="square" data-action="setlist-stop" title="Setliste stoppen" aria-label="Setliste stoppen" ${!((playing || paused) && playbackScope === 'setlist') ? 'disabled' : ''}>${icon('stop')}</button></div><small id="play-status">${playing || paused ? esc(songById(selectedSong)?.title || '') : 'Setliste abspielen'}</small></div><div class="topbar-actions">${list ? `<button data-action="rename" title="Setliste umbenennen">Umbenennen</button><button data-action="youtube" ${busy ? 'disabled' : ''}>${icon('plus')} YouTube → MP3</button><button class="primary" data-action="import-folder" ${busy ? 'disabled' : ''}>${icon('folder')} ${busy ? 'Import läuft …' : 'Ordner importieren'}</button>` : `<button class="primary" data-action="new">${icon('plus')} Neue Setliste</button>`}<button class="quiet" data-action="help" title="Tastaturkürzel" aria-label="Tastaturkürzel"><kbd>?</kbd></button></div></header>
     <div class="content">
     ${songs.length ? `<div class="song-list">${songs.map((song, i) => songRow(song, i)).join('')}</div><button class="add-song" data-action="import-files" ${busy ? 'disabled' : ''}>${icon('plus')} MP3-Dateien hinzufügen</button>` : `<div class="empty"><div class="empty-icon">${icon('music')}</div><h2>${list ? 'Platz für deine nächste Show.' : 'Mehr spielen. Weniger suchen.'}</h2><p>${list ? 'Importiere einen Ordner mit MP3s. Markiere deine Solos<br>und bring die Songs in deine Reihenfolge.' : 'Erstelle deine erste Setliste und importiere die Songs<br>direkt aus einem Ordner auf deinem Rechner.'}</p><button class="primary" data-action="${list ? 'import-folder' : 'new'}">${icon(list ? 'folder' : 'plus')}${list ? 'MP3-Ordner wählen' : 'Setliste erstellen'}</button><div class="empty-steps"><span>01 <b>Songs importieren</b></span><span>02 <b>Sektionen markieren</b></span><span>03 <b>Gig vorbereiten</b></span></div></div>`}
     <div class="content-foot"><span>${icon('clock')} Wechselpausen gelten zwischen Songs.</span><span id="saved">${saveError ? 'Speichern fehlgeschlagen' : 'Lokal gespeichert'}</span>${list ? '<button class="text-danger" data-action="delete-list">Setliste löschen</button>' : ''}</div></div></main>
-    <footer class="transport"><div class="now-playing"><div class="track-icon">${icon(mode === 'loop' ? 'loop' : 'guitar')}</div><div><strong>${esc(selected?.title || 'Wähle einen Song')}</strong><small id="play-status">${esc(section?.name || (selected ? 'Ganzer Song' : 'Dein nächster guter Take wartet.'))}</small></div></div>
-    <div class="player-buttons"><button class="square" data-action="stop" title="Stop (Esc)">${icon('stop')}</button><button class="play-button" data-action="play" title="Abspielen / Pause (Leertaste)" ${!songs.length ? 'disabled' : ''}>${icon(playing ? 'pause' : 'play')}</button><button class="square" data-action="next" title="Nächste Sektion (N)">${icon('next')}</button></div>
-    <div class="player-settings"><label>Vorzählen <div class="count-settings"><select id="count" aria-label="Vorzähl-Schläge">${[0, 2, 4, 8].map(n => `<option value="${n}" ${n === state.settings.count ? 'selected' : ''}>${n ? `${n} Schläge` : 'Aus'}</option>`).join('')}</select><input id="bpm" aria-label="Vorzähltempo BPM" title="Vorzähltempo in BPM" type="number" min="30" max="240" value="${state.settings.bpm}"><small>BPM</small></div></label><label class="volume">Lautstärke<input id="volume" aria-label="Lautstärke" type="range" min="0" max="1" step="0.01" value="${state.settings.volume}"></label></div></footer>
     <dialog id="dialog"></dialog><div id="toast" role="status"></div>`;
   requestAnimationFrame(drawWaves);
 }
@@ -59,15 +57,17 @@ function songRow(song, i) {
   return `<article class="song-row ${chosen ? 'chosen' : ''} ${failures.has(song.id) ? 'failed' : ''}" data-song="${song.id}">
     <div class="song-info"><button class="drag-handle" draggable="true" data-id="${song.id}" title="Song ziehen, um die Reihenfolge zu ändern" aria-label="${esc(song.title)} verschieben">${icon('grip')}</button><span class="song-number">${String(i + 1).padStart(2, '0')}</span>
     <div class="song-title"><button data-action="select-song" data-id="${song.id}" title="Song auswählen · Doppelklick zum Umbenennen">${esc(song.title)}</button><small>${failures.has(song.id) ? 'MP3 nicht lesbar' : `${time(song.duration)} · ${song.sections.length ? `${song.sections.length} Sektionen` : 'Ganzer Song'}`}</small>
-    <button class="preview-button ${previewSong === song.id && playing ? 'preview-active' : ''}" data-action="preview" data-id="${song.id}" title="Song vollständig ohne Loop anhören">${icon('play')} Song anhören</button>
     <label class="gap">${icon('clock')}<input aria-label="Wechselpause für ${esc(song.title)}" class="gap-input" data-id="${song.id}" type="number" min="0" max="600" value="${song.gap}"> s Wechselpause</label></div></div>
     <div class="wave-area"><div class="wave" data-id="${song.id}"><canvas></canvas>${song.sections.map((s, j) => `<button class="region color-${j % 4} ${chosen && selectedSection === s.id ? 'selected-region' : ''}" data-action="section" data-song="${song.id}" data-id="${s.id}" style="left:${s.start / song.duration * 100}%;width:${(s.end - s.start) / song.duration * 100}%" title="${esc(s.name)} · ${s.start.toFixed(2)}–${s.end.toFixed(2)} s · Ziehen: verschieben · Ränder: Größe ändern"><span class="region-label">${esc(s.name)}</span><span class="region-handle handle-start" data-edge="start" title="Start verschieben"></span><span class="region-handle handle-end" data-edge="end" title="Ende verschieben"></span></button>`).join('')}<div class="playhead" hidden></div></div>
-    <div class="wave-times"><span>0:00</span><span>${waves.has(song.id) ? time(song.duration) : failures.has(song.id) ? 'Datei prüfen' : 'Waveform wird geladen …'}</span></div><div class="song-controls">
+    <div class="wave-times"><span>0:00</span><span>${waves.has(song.id) ? time(song.duration) : failures.has(song.id) ? 'Datei prüfen' : 'Waveform wird geladen …'}</span></div></div>
+    <div class="row-actions"><button class="square" data-action="new-section" data-id="${song.id}" title="Sektion mit Zeitangaben hinzufügen">${icon('plus')}</button><button class="square" data-action="delete-song" data-id="${song.id}" title="Song aus Setliste entfernen">${icon('trash')}</button></div><div class="song-controls">
+      <div class="song-buttons"><button class="song-start" data-action="song-start" data-id="${song.id}" title="Song starten / fortsetzen" aria-label="${esc(song.title)} starten">${icon('play')}</button><button data-action="song-pause" data-id="${song.id}" title="Song pausieren" aria-label="${esc(song.title)} pausieren" ${!(playing && queue[queueIndex]?.songId === song.id) ? 'disabled' : ''}>${icon('pause')}</button><button data-action="song-stop" data-id="${song.id}" title="Song stoppen" aria-label="${esc(song.title)} stoppen" ${!((playing || paused) && queue[queueIndex]?.songId === song.id) ? 'disabled' : ''}>${icon('stop')}</button></div>
+      <label>Abspielen <select class="song-play-mode" data-id="${song.id}" aria-label="Abspielumfang für ${esc(song.title)}"><option value="full" ${song.playMode === 'full' ? 'selected' : ''}>Komplett</option><option value="loops" ${song.playMode === 'loops' ? 'selected' : ''}>Loops</option></select></label>
+      <label>Vorzählen <select class="song-count" data-id="${song.id}" aria-label="Vorzählen für ${esc(song.title)}">${[0,2,4,8].map(n => `<option value="${n}" ${song.count === n ? 'selected' : ''}>${n ? n + ' Schläge' : 'Aus'}</option>`).join('')}</select><input class="song-bpm" data-id="${song.id}" aria-label="BPM für ${esc(song.title)}" type="number" min="30" max="240" value="${song.bpm}"><span>BPM</span></label>
+      <label>Lautstärke <input class="song-volume" data-id="${song.id}" aria-label="Lautstärke für ${esc(song.title)}" type="range" min="0" max="1" step="0.01" value="${song.volume}"></label>
       <label>Tempo <input class="song-tempo" data-id="${song.id}" aria-label="Tempo für ${esc(song.title)}" type="range" min="0.5" max="1.25" step="0.05" value="${song.tempo}"><output>${Math.round(song.tempo * 100)}%</output></label>
       <label>Tonhöhe <div class="stepper"><button data-action="pitch-down" data-id="${song.id}" aria-label="${esc(song.title)}: Halbton tiefer">−</button><output>${song.pitch > 0 ? '+' : ''}${song.pitch} HT</output><button data-action="pitch-up" data-id="${song.id}" aria-label="${esc(song.title)}: Halbton höher">+</button></div></label>
-      <label>Abspielen <select class="song-play-mode" data-id="${song.id}" aria-label="Abspielumfang für ${esc(song.title)}"><option value="full" ${song.playMode === 'full' ? 'selected' : ''}>Komplett</option><option value="loops" ${song.playMode === 'loops' ? 'selected' : ''}>Loops</option></select></label>
-    </div></div>
-    <div class="row-actions"><button class="square" data-action="new-section" data-id="${song.id}" title="Sektion mit Zeitangaben hinzufügen">${icon('plus')}</button><button class="square" data-action="delete-song" data-id="${song.id}" title="Song aus Setliste entfernen">${icon('trash')}</button></div></article>`;
+    </div></article>`;
 }
 function editSongTitle(button) {
   titleEditor?.finish(true);
@@ -81,7 +81,6 @@ function editSongTitle(button) {
     const name = input.value.trim();
     if (save && name && name !== song.title) { song.title = name; persist(); }
     button.textContent = song.title; input.replaceWith(button);
-    if (selectedSong === song.id) document.querySelector('.now-playing strong').textContent = song.title;
   } };
   titleEditor = editor;
   input.addEventListener('blur', () => editor.finish(true));
@@ -166,31 +165,32 @@ function sectionDialog(song, section, start = 0, end = Math.min(10, song.duratio
 }
 function stop(reset = true) {
   run++; engine.stop(); clearTimeout(gapTimer); gapUntil = 0; playing = false;
-  if (reset) { paused = false; resumeAt = null; previewSong = null; }
+  if (reset) { paused = false; resumeAt = null; previewSong = null; playbackScope = null; }
 }
-async function startItem(count = 0) {
+async function startItem(countIn = false) {
   const item = queue[queueIndex], song = songById(item?.songId);
   if (!item || !song) { stop(); render(); return; }
   const token = ++run;
   playing = true; paused = false; selectedSong = song.id; selectedSection = item.id;
   const start = resumeAt ?? item.start; resumeAt = null; render();
-  try { await engine.play(song, start, item.end, { ...state.settings, ...songSettings(song) }, mode === 'loop' && !previewSong, count, () => advance(token), item.start); }
+  const settings = songSettings(song);
+  try { await engine.play(song, start, item.end, settings, mode === 'loop' && !previewSong && item.id !== 'full', countIn ? settings.count : 0, () => advance(token), item.start); }
   catch { if (token === run) { stop(); render(); notify(`„${song.title}“ konnte nicht abgespielt werden. Bitte MP3 prüfen.`); } }
 }
 function advance(token) {
   if (token !== run) return;
   if (previewSong) { stop(); render(); return; }
   const previous = queue[queueIndex]; queueIndex++;
-  if (queueIndex >= queue.length) { stop(); render(); notify('Setliste geschafft. Bereit für die Bühne.'); return; }
+  if (queueIndex >= queue.length) { const finishedSetlist = playbackScope === 'setlist'; stop(); render(); if (finishedSetlist) notify('Setliste geschafft. Bereit für die Bühne.'); return; }
   const gap = queue[queueIndex].songId !== previous.songId ? songById(previous.songId).gap : 0;
   if (gap > 0) {
     engine.stop(); gapUntil = Date.now() + gap * 1000;
-    gapTimer = setTimeout(() => { gapUntil = 0; if (token === run) startItem(state.settings.count); }, gap * 1000);
-  } else startItem(queue[queueIndex].songId !== previous.songId ? state.settings.count : 0);
+    gapTimer = setTimeout(() => { gapUntil = 0; if (token === run) startItem(true); }, gap * 1000);
+  } else startItem(queue[queueIndex].songId !== previous.songId);
 }
 async function preview(song, position = 0) {
   if (!song?.duration || failures.has(song.id)) return notify('Die Audiodatei muss zuerst geladen werden.');
-  stop(); previewSong = song.id; selectedSong = song.id; selectedSection = null;
+  stop(); playbackScope = 'preview'; previewSong = song.id; selectedSong = song.id; selectedSection = null;
   queue = [{ id: 'preview', name: 'Song anhören', songId: song.id, start: 0, end: song.duration }];
   queueIndex = 0; resumeAt = clamp(position, 0, song.duration - 0.01); await startItem(0);
 }
@@ -201,15 +201,29 @@ async function togglePlay() {
   }
   if (!current()?.songs.length) return;
   if (paused) { await startItem(0); return; }
-  await hydrate();
-  if (mode === 'loop') {
-    const song = songById(selectedSong), section = song?.sections.find(s => s.id === selectedSection);
-    if (!section) { notify('Für Loop Mode zuerst eine farbige Sektion auswählen.'); return; }
-    queue = [{ ...section, songId: song.id }];
-  } else {
-    queue = playlist(current().songs);
-  }
-  queueIndex = 0; await startItem(state.settings.count);
+  if (mode === 'loop') await startSong(songById(selectedSong));
+  else await startSetlist();
+}
+async function startSetlist() {
+  if (paused && playbackScope === 'setlist') return startItem(false);
+  if (!current()?.songs.length) return;
+  await hydrate(); stop(); mode = 'song'; playbackScope = 'setlist';
+  queue = playlist(current().songs); queueIndex = 0; await startItem(true);
+}
+async function startSong(song) {
+  if (!song?.duration || failures.has(song.id)) return notify('Die Audiodatei muss zuerst geladen werden.');
+  if (paused && playbackScope !== 'setlist' && queue[queueIndex]?.songId === song.id) return startItem(false);
+  const section = song.sections.find(s => s.id === selectedSection) || song.sections[0];
+  stop(); playbackScope = 'song'; selectedSong = song.id;
+  queue = mode === 'loop' && section ? [{ ...section, songId: song.id }] : ranges(song).map(item => ({ ...item, songId: song.id }));
+  queueIndex = 0; await startItem(true);
+}
+function updatePlaybackButtons() {
+  document.querySelector('[data-action="setlist-pause"]').disabled = !(playing && playbackScope === 'setlist');
+  document.querySelector('[data-action="setlist-stop"]').disabled = !((playing || paused) && playbackScope === 'setlist');
+  document.querySelectorAll('[data-action="song-pause"], [data-action="song-stop"]').forEach(button => {
+    button.disabled = !(queue[queueIndex]?.songId === button.dataset.id && (playing || (paused && button.dataset.action === 'song-stop')));
+  });
 }
 async function importAudio(folder) {
   if (busy || !current()) return;
@@ -230,23 +244,27 @@ const actions = {
   'import-folder': () => importAudio(true), 'import-files': () => importAudio(false),
   youtube: () => youtubeDialog(),
   preview: el => preview(songById(el.dataset.id)),
+  'song-start': el => startSong(songById(el.dataset.id)),
+  'song-pause': () => togglePlay(),
+  'song-stop': () => { stop(); render(); },
+  'setlist-start': startSetlist,
+  'setlist-pause': () => togglePlay(),
+  'setlist-stop': () => { stop(); render(); },
   'mode-song': () => { stop(); mode = 'song'; render(); }, 'mode-loop': () => { stop(); mode = 'loop'; render(); },
   'select-song': el => {
     stop(); selectedSong = el.dataset.id; selectedSection = null;
     document.querySelectorAll('.song-row').forEach(row => row.classList.toggle('chosen', row.dataset.song === selectedSong));
     document.querySelectorAll('.selected-region').forEach(region => region.classList.remove('selected-region'));
-    document.querySelector('.now-playing strong').textContent = songById(selectedSong).title;
     document.querySelector('#play-status').textContent = 'Ganzer Song';
-    document.querySelector('.play-button').innerHTML = icon('play');
+    updatePlaybackButtons();
   },
   section: el => {
     stop(); selectedSong = el.dataset.song; selectedSection = el.dataset.id;
     document.querySelectorAll('.selected-region').forEach(region => region.classList.remove('selected-region'));
     document.querySelectorAll('.song-row').forEach(row => row.classList.toggle('chosen', row.dataset.song === selectedSong));
     el.classList.add('selected-region');
-    document.querySelector('.now-playing strong').textContent = songById(selectedSong).title;
     document.querySelector('#play-status').textContent = songById(selectedSong).sections.find(s => s.id === selectedSection).name;
-    document.querySelector('.play-button').innerHTML = icon('play');
+    updatePlaybackButtons();
   },
   'new-section': el => sectionDialog(songById(el.dataset.id)),
   'delete-section': el => { const song = songById(el.dataset.song); stop(); song.sections = song.sections.filter(s => s.id !== el.dataset.id); selectedSection = null; persist(); render(); },
@@ -254,27 +272,24 @@ const actions = {
   'delete-list': () => dialog('Setliste löschen?', `<p>„${esc(current().name)}“ und ihre Übungsmarkierungen werden entfernt. Importierte Audiodateien bleiben lokal erhalten.</p>`, () => { stop(); state.setlists = state.setlists.filter(l => l.id !== activeId); activeId = state.setlists[0]?.id; selectedSong = null; selectedSection = null; persist(); render(); }, 'Setliste löschen'),
   'close-dialog': async () => { if (downloadActive) { document.querySelector('#download-status').textContent = 'Download wird abgebrochen …'; await window.gigman.cancelYouTube(); } else document.querySelector('#dialog').close(); },
   play: togglePlay, stop: () => { stop(); render(); },
-  next: () => { if (!playing && !paused) return; if (previewSong) { stop(); render(); return; } engine.stop(); clearTimeout(gapTimer); gapUntil = 0; resumeAt = null; if (mode === 'loop') startItem(0); else { queueIndex++; startItem(state.settings.count); } },
+  next: () => { if (!playing && !paused) return; if (previewSong) { stop(); render(); return; } engine.stop(); clearTimeout(gapTimer); gapUntil = 0; resumeAt = null; if (mode === 'loop') startItem(0); else { queueIndex++; startItem(true); } },
   'pitch-down': el => songSetting(el.dataset.id, 'pitch', clamp(songById(el.dataset.id).pitch - 1, -12, 12)),
   'pitch-up': el => songSetting(el.dataset.id, 'pitch', clamp(songById(el.dataset.id).pitch + 1, -12, 12)),
-  help: () => dialog('Mit Gitarre in der Hand', '<div class="shortcuts"><p><kbd>Leertaste</kbd> Abspielen / Pause</p><p><kbd>Esc</kbd> Stop</p><p><kbd>N</kbd> Nächste Sektion</p><p><kbd>L</kbd> Song / Loop Mode wechseln</p><p><kbd>− / +</kbd> Tempo ändern</p></div><p>„Song anhören“: ganzer Track ohne Loop.<br>Klick in die freie Waveform: ab dieser Stelle anhören.<br>Bereich ziehen: Sektion anlegen.<br>Sektion in der Mitte ziehen: verschieben. Randgriffe: Größe ändern.<br>Doppelklick auf Sektion: Namen und genaue Zeiten bearbeiten.<br>Song am Griff links ziehen: Reihenfolge ändern.</p>', () => document.querySelector('#dialog').close(), 'Verstanden')
+  help: () => dialog('Mit Gitarre in der Hand', '<div class="shortcuts"><p><kbd>Leertaste</kbd> Abspielen / Pause</p><p><kbd>Esc</kbd> Stop</p><p><kbd>N</kbd> Nächste Sektion</p><p><kbd>L</kbd> Song / Loop Mode wechseln</p><p><kbd>− / +</kbd> Tempo ändern</p></div><p>P: ausgewählten Song komplett ohne Loop anhören.<br>Symboltasten im Song: diesen Song starten, pausieren oder stoppen.<br>Transporttasten oben: ganze Setliste steuern.<br>Klick in die freie Waveform: ab dieser Stelle anhören.<br>Bereich ziehen: Sektion anlegen.<br>Sektion in der Mitte ziehen: verschieben. Randgriffe: Größe ändern.<br>Doppelklick auf Sektion: Namen und genaue Zeiten bearbeiten.<br>Rechtsklick auf Sektion → Löschen: Sektion entfernen.<br>Song am Griff links ziehen: Reihenfolge ändern.</p>', () => document.querySelector('#dialog').close(), 'Verstanden')
 };
-function setting(key, value) {
-  state.settings[key] = value; persist();
-  if (key === 'volume') { engine.setVolume(value); return; }
-  render();
-}
 function songSetting(id, key, value) {
   const song = songById(id); if (!song) return;
   const active = (playing || paused) && queue[queueIndex]?.songId === id;
   const position = playing && !gapUntil ? engine.position() : resumeAt;
   song[key] = value; persist();
+  if (key === 'volume') { if (active) engine.setVolume(value); return; }
+  if (key === 'count' || key === 'bpm') { render(); return; }
   if (key === 'playMode') {
     if ((playing || paused) && !previewSong && mode === 'song') stop();
     render(); return;
   }
   if (active && playing && !gapUntil) {
-    resumeAt = engine.countRemaining(state.settings.bpm) ? queue[queueIndex].start : position;
+    resumeAt = engine.countRemaining(engine.bpm) ? queue[queueIndex].start : position;
     startItem(0);
   } else render();
 }
@@ -292,10 +307,20 @@ app.addEventListener('change', e => {
   if (el.classList.contains('song-tempo')) { songSetting(el.dataset.id, 'tempo', clamp(Number(el.value), 0.5, 1.25)); return; }
   if (el.classList.contains('song-play-mode')) { songSetting(el.dataset.id, 'playMode', el.value === 'full' ? 'full' : 'loops'); return; }
   if (el.classList.contains('gap-input')) { songById(el.dataset.id).gap = clamp(Number(el.value) || 0, 0, 600); el.value = songById(el.dataset.id).gap; persist(); }
-  const limits = { bpm: [30, 240], count: [0, 8], volume: [0, 1] };
-  if (limits[el.id]) setting(el.id, clamp(Number(el.value) || 0, ...limits[el.id]));
+  for (const [key, limits] of Object.entries({ bpm: [30, 240], count: [0, 8], volume: [0, 1] })) {
+    if (el.classList.contains(`song-${key}`)) songSetting(el.dataset.id, key, clamp(Number(el.value) || 0, ...limits));
+  }
 });
-app.addEventListener('input', e => { if (e.target.id === 'volume') engine.setVolume(Number(e.target.value)); if (e.target.classList.contains('song-tempo')) e.target.nextElementSibling.textContent = `${Math.round(Number(e.target.value) * 100)}%`; });
+app.addEventListener('input', e => { if (e.target.classList.contains('song-volume')) songSetting(e.target.dataset.id, 'volume', Number(e.target.value)); if (e.target.classList.contains('song-tempo')) e.target.nextElementSibling.textContent = `${Math.round(Number(e.target.value) * 100)}%`; });
+app.addEventListener('contextmenu', e => {
+  const region = e.target.closest('.region'); if (!region) return;
+  e.preventDefault(); document.querySelector('.section-menu')?.remove();
+  const menu = document.createElement('div'); menu.className = 'section-menu'; menu.setAttribute('role', 'menu');
+  menu.innerHTML = `<button role="menuitem" data-action="delete-section" data-song="${region.dataset.song}" data-id="${region.dataset.id}">${icon('trash')} Löschen</button>`;
+  menu.style.left = `${Math.min(e.clientX, innerWidth - 155)}px`; menu.style.top = `${Math.min(e.clientY, innerHeight - 55)}px`;
+  app.append(menu); menu.querySelector('button').focus();
+});
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.section-menu')) document.querySelector('.section-menu')?.remove(); });
 let dragged;
 app.addEventListener('dragstart', e => { const el = e.target.closest('.drag-handle'); if (!el) return; dragged = el.dataset.id; e.dataTransfer.setData('text/plain', dragged); e.dataTransfer.effectAllowed = 'move'; });
 app.addEventListener('dragover', e => { const row = e.target.closest('.song-row'); if (row && dragged) { e.preventDefault(); row.classList.add('drop-target'); } });
@@ -341,7 +366,7 @@ app.addEventListener('pointerup', async e => {
     if (!s.moved) return;
     suppressClickUntil = performance.now() + 200;
     selectedSong = s.song.id; selectedSection = s.section.id; persist(); render();
-    if (s.restartLoop) { queue = [{ ...s.section, songId: s.song.id }]; queueIndex = 0; await startItem(0); }
+    if (s.restartLoop) { playbackScope = 'song'; queue = [{ ...s.section, songId: s.song.id }]; queueIndex = 0; await startItem(0); }
     return;
   }
   if (!selection) return; const s = selection; selection = null; s.marker.remove();
@@ -355,6 +380,7 @@ app.addEventListener('pointercancel', () => {
   if (regionDrag) { Object.assign(regionDrag.section, regionDrag.original); regionDrag = null; render(); }
 });
 document.addEventListener('keydown', async e => {
+  if (e.key === 'Escape' && document.querySelector('.section-menu')) { document.querySelector('.section-menu').remove(); e.preventDefault(); return; }
   if (e.target.closest('input,select,textarea') || document.querySelector('#dialog')?.open || e.ctrlKey || e.altKey || e.metaKey || locked) return;
   const key = e.key.toLowerCase();
   if (key === 'p' && !e.repeat) { e.preventDefault(); await preview(songById(selectedSong)); return; }
@@ -363,6 +389,8 @@ document.addEventListener('keydown', async e => {
   if (['-', '+', '='].includes(key) && songById(selectedSong)) { e.preventDefault(); const song = songById(selectedSong); songSetting(song.id, 'tempo', clamp(Math.round((song.tempo + (key === '-' ? -0.05 : 0.05)) * 100) / 100, 0.5, 1.25)); }
 });
 window.addEventListener('resize', drawWaves);
+window.addEventListener('resize', () => document.querySelector('.section-menu')?.remove());
+document.addEventListener('scroll', () => document.querySelector('.section-menu')?.remove(), true);
 window.gigman?.onClosing(async () => {
   titleEditor?.finish(true);
   if (downloadActive) await window.gigman.cancelYouTube();
@@ -376,7 +404,7 @@ function tick() {
   const status = document.querySelector('#play-status');
   if (playing && status) {
     if (gapUntil) status.textContent = `Gitarrenwechsel · noch ${Math.max(0, Math.ceil((gapUntil - Date.now()) / 1000))} s`;
-    else { const count = engine.countRemaining(state.settings.bpm); status.textContent = count ? `Vorzählen · ${count}` : `${queue[queueIndex]?.name || ''} · ${time(engine.position())}${mode === 'loop' && !previewSong ? ' · Loop' : ''}`; }
+    else { const count = engine.countRemaining(engine.bpm); status.textContent = count ? `Vorzählen · ${count}` : `${songById(queue[queueIndex]?.songId)?.title || ''} · ${queue[queueIndex]?.name || ''} · ${time(engine.position())}${mode === 'loop' && !previewSong ? ' · Loop' : ''}`; }
   }
   document.querySelectorAll('.playhead').forEach(head => {
     const song = songById(head.parentElement.dataset.id); head.hidden = !playing || !!gapUntil || song?.id !== selectedSong;
@@ -392,7 +420,7 @@ async function boot() {
     state.settings = { tempo: 1, pitch: 0, count: 4, bpm: 100, volume: 0.8, ...state.settings };
     let migrated = false;
     for (const list of state.setlists) for (const song of list.songs) {
-      if (song.tempo == null || song.pitch == null || song.playMode == null) { Object.assign(song, songSettings(song, state.settings)); migrated = true; }
+      if (song.tempo == null || song.pitch == null || song.playMode == null || song.count == null || song.bpm == null || song.volume == null) { Object.assign(song, songSettings(song, state.settings)); migrated = true; }
     }
     activeId = state.setlists[0]?.id; selectedSong = current()?.songs[0]?.id;
     engine.setVolume(state.settings.volume); render(); tick(); await hydrate();

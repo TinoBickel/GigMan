@@ -44,6 +44,7 @@ export class AudioEngine {
     this.stop(); const token = this.token;
     const { buffer } = await this.decode(song);
     if (token !== this.token) return;
+    this.setVolume(settings.volume);
     this.processor = new SoundTouchNode({ context: this.context });
     this.processor.playbackRate.value = settings.tempo;
     this.processor.pitchSemitones.value = settings.pitch;
@@ -52,6 +53,7 @@ export class AudioEngine {
     this.source.playbackRate.value = settings.tempo; this.source.connect(this.processor);
     this.source.loop = loop; this.source.loopStart = rangeStart; this.source.loopEnd = end;
     const now = this.context.currentTime + 0.06;
+    this.bpm = settings.bpm;
     const lead = count * 60 / settings.bpm;
     this.clicks = [];
     for (let i = 0; i < count; i++) {

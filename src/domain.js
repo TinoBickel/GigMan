@@ -5,7 +5,8 @@ export function ranges(song) {
 }
 export function songSettings(song, legacy = {}) {
   const tempo = song.tempo ?? legacy.tempo ?? 1, pitch = song.pitch ?? legacy.pitch ?? 0;
-  return { tempo: clamp(Number(tempo) || 1, 0.5, 1.25), pitch: clamp(Math.round(Number(pitch) || 0), -12, 12), playMode: song.playMode === 'full' ? 'full' : 'loops' };
+  const count = Number(song.count ?? legacy.count ?? 4), bpm = Number(song.bpm ?? legacy.bpm ?? 100), volume = Number(song.volume ?? legacy.volume ?? 0.8);
+  return { tempo: clamp(Number(tempo) || 1, 0.5, 1.25), pitch: clamp(Math.round(Number(pitch) || 0), -12, 12), playMode: song.playMode === 'full' ? 'full' : 'loops', count: [0, 2, 4, 8].includes(count) ? count : 4, bpm: clamp(Math.round(bpm) || 100, 30, 240), volume: clamp(Number.isFinite(volume) ? volume : 0.8, 0, 1) };
 }
 export function playlist(songs) { return songs.flatMap(ranges); }
 export function moveSong(songs, id, target) {
